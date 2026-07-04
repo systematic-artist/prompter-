@@ -181,6 +181,7 @@
 <div class="screen active" id="setup">
   <h1>PROMPTER</h1>
   <div class="sub">Paste script → set speed → record → save to Photos</div>
+  <a id="statsLine" href="https://prompter.goatcounter.com" target="_blank" rel="noopener" style="display:none;font-size:12px;color:var(--accent);text-decoration:none;margin:-8px 0 14px;line-height:1.5"></a>
   <div class="row" style="margin:0 0 10px">
     <button class="toggle" id="pasteBtn" type="button">📋 Paste</button>
     <button class="toggle" id="clearBtn" type="button">✕ Clear</button>
@@ -207,6 +208,8 @@
   <button id="startBtn">Open camera</button>
   <div class="hint">
     DJI mic: plug the receiver into the USB-C port before opening the camera — iOS routes all audio through it automatically. Audio processing (noise suppression / AGC) is disabled for clean external-mic sound.
+    <br><br>
+    <b style="color:var(--text)">Privacy:</b> your script and your videos never leave your phone — recording goes straight from camera to your Photos. We count only anonymous taps (visit, record, save), and even those numbers are public: anyone can verify them live at <a href="https://prompter.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent)">prompter.goatcounter.com</a>.
   </div>
   <button id="heartLink" type="button">♥ Free forever — support the builder</button>
 </div>
@@ -267,7 +270,30 @@
   const PAYPAL_ME = 'monoserie';    // paypal.me/monoserie
   const INSTAGRAM = 'leon.djan';    // instagram.com/leon.djan
   const APP_URL   = 'https://systematic-artist.github.io/prompter-/prompter.html';
+  const GOATCOUNTER = 'prompter';   // dashboard: prompter.goatcounter.com
   // ═══════════════════════════════════
+
+  // Anonymous usage counting via GoatCounter pixel — no cookies, no personal
+  // data, videos never leave the device. Counts events only.
+  function track(name) {
+    if (!GOATCOUNTER || GOATCOUNTER === 'YOURCODE') return;
+    try {
+      const img = new Image(1, 1);
+      img.src = 'https://' + GOATCOUNTER + '.goatcounter.com/count?' +
+        'p=' + encodeURIComponent('/' + name) +
+        '&e=true&rnd=' + Math.random().toString(36).slice(2);
+    } catch(e){}
+  }
+  // pageview (visit)
+  if (GOATCOUNTER && GOATCOUNTER !== 'YOURCODE') {
+    try {
+      const img = new Image(1, 1);
+      img.src = 'https://' + GOATCOUNTER + '.goatcounter.com/count?' +
+        'p=' + encodeURIComponent(location.pathname) +
+        '&r=' + encodeURIComponent(document.referrer) +
+        '&rnd=' + Math.random().toString(36).slice(2);
+    } catch(e){}
+  }
 
   const $ = id => document.getElementById(id);
   const screens = {setup:$('setup'), stage:$('stage'), review:$('review')};
@@ -318,6 +344,30 @@
   $('cd').oninput    = e => { countdownSecs = +e.target.value; $('cdVal').textContent = countdownSecs + ' s'; };
   $('speedVal').textContent = speed + ' px/s';
 
+  // ---------- live public stats (GoatCounter public counter API) ----------
+  (async () => {
+    if (!GOATCOUNTER || GOATCOUNTER === 'YOURCODE') return;
+    const base = 'https://' + GOATCOUNTER + '.goatcounter.com/counter';
+    const num = async path => {
+      const r = await fetch(base + path + '.json');
+      if (!r.ok) throw 0;
+      const d = await r.json();
+      return parseInt(String(d.count).replace(/[^\d]/g, ''), 10) || 0;
+    };
+    try {
+      let videos = 0, visits = 0;
+      try { videos = await num('//video-saved'); } catch(e){}
+      try { visits = await num('/TOTAL'); } catch(e){}
+      if (videos || visits) {
+        const parts = [];
+        if (videos) parts.push('🎬 ' + videos.toLocaleString() + ' videos recorded with this tool');
+        if (visits) parts.push('👀 ' + visits.toLocaleString() + ' visits');
+        $('statsLine').textContent = parts.join(' · ') + ' — live public stats ↗';
+        $('statsLine').style.display = 'block';
+      }
+    } catch(e){ /* blocked or no data yet — show nothing */ }
+  })();
+
   // autosave while typing — edits survive app switches
   let saveT = null;
   $('script').addEventListener('input', () => {
@@ -341,6 +391,7 @@
       return false;
     }
     $('cam').srcObject = stream;
+    track('camera-opened');
     return true;
   }
 
@@ -493,6 +544,7 @@
     mediaRecorder.start(); // single blob at stop — iOS mp4 recording is unreliable with timeslices
     recording = true;
     discardTake = false;
+    track('recording-started');
     $('testBtn').style.display = 'none';
     $('restartBtn').style.display = 'none';
     $('recBtn').classList.add('recording');
@@ -541,6 +593,10 @@
   $('tip3').href = `https://paypal.me/${PAYPAL_ME}/3EUR`;
   $('tipX').href = `https://paypal.me/${PAYPAL_ME}`;
   $('igBtn').href = `https://instagram.com/${INSTAGRAM}`;
+  $('tip1').addEventListener('click', () => track('tip-1'));
+  $('tip3').addEventListener('click', () => track('tip-3'));
+  $('tipX').addEventListener('click', () => track('tip-custom'));
+  $('igBtn').addEventListener('click', () => track('ig-follow'));
 
   function showThanks(force) {
     if (!force && localStorage.getItem('prompter_thanked')) return;
@@ -558,7 +614,7 @@
       url: APP_URL
     };
     if (navigator.share) {
-      try { await navigator.share(payload); } catch(e){}
+      try { await navigator.share(payload); track('app-shared'); } catch(e){}
     } else {
       try {
         await navigator.clipboard.writeText(APP_URL);
@@ -575,7 +631,7 @@
     const name = 'prompter-' + new Date().toISOString().replace(/[:.]/g,'-').slice(0,19) + '.' + ext;
     const file = new File([recordedBlob], name, { type: recordedBlob.type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); showThanks(false); return; }
+      try { await navigator.share({ files: [file] }); track('video-saved'); showThanks(false); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
     // fallback: download link
@@ -583,6 +639,7 @@
     a.href = URL.createObjectURL(recordedBlob);
     a.download = name;
     a.click();
+    track('video-saved');
     showThanks(false);
   };
 
