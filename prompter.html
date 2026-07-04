@@ -33,10 +33,12 @@
 
   /* ---------- SETUP ---------- */
   #setup{padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);overflow-y:auto}
+  #setup > *{flex-shrink:0}
   #setup h1{font-size:17px;font-weight:700;letter-spacing:.3px;margin-bottom:2px}
   #setup .sub{font-size:12px;color:var(--dim);margin-bottom:14px}
   textarea{
-    width:100%;height:34vh;background:var(--panel);border:1px solid var(--line);
+    width:100%;height:32vh;min-height:180px;flex-shrink:0;
+    background:var(--panel);border:1px solid var(--line);
     border-radius:12px;color:var(--text);font-size:16px;line-height:1.5;
     padding:12px;resize:none;font-family:inherit;
   }
@@ -56,7 +58,19 @@
     background:var(--go);color:#04250f;font-size:16px;font-weight:700;font-family:inherit;
   }
   #startBtn:active{opacity:.8}
-  .hint{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.5}
+  .hint{font-size:11px;color:var(--dim);line-height:1.5}
+  .infoFold{margin-top:14px}
+  .infoFold summary{
+    font-size:12px;color:var(--dim);padding:10px 12px;cursor:pointer;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    list-style:none;-webkit-tap-highlight-color:transparent;
+  }
+  .infoFold summary::-webkit-details-marker{display:none}
+  .infoFold[open] summary{color:var(--text);border-radius:10px 10px 0 0}
+  .infoFold .hint{
+    margin:0;padding:12px;background:var(--panel);
+    border:1px solid var(--line);border-top:none;border-radius:0 0 10px 10px;
+  }
 
   /* ---------- RECORD ---------- */
   #stage{background:#000}
@@ -206,11 +220,14 @@
   </div>
 
   <button id="startBtn">Open camera</button>
-  <div class="hint">
-    DJI mic: plug the receiver into the USB-C port before opening the camera — iOS routes all audio through it automatically. Audio processing (noise suppression / AGC) is disabled for clean external-mic sound.
-    <br><br>
-    <b style="color:var(--text)">Privacy:</b> your script and your videos never leave your phone — recording goes straight from camera to your Photos. We count only anonymous taps (visit, record, save), and even those numbers are public: anyone can verify them live at <a href="https://prompter.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent)">prompter.goatcounter.com</a>.
-  </div>
+  <details class="infoFold">
+    <summary>ℹ️ Mic, privacy &amp; live stats</summary>
+    <div class="hint">
+      <b style="color:var(--text)">External mic (DJI etc.):</b> plug the receiver into the USB-C port <i>before</i> opening the camera — iOS routes all audio through it automatically. Audio processing (noise suppression / AGC) is disabled for clean external-mic sound.
+      <br><br>
+      <b style="color:var(--text)">Privacy:</b> your script and your videos never leave your phone — recording goes straight from camera to your Photos. We count only anonymous taps (visit, record, save), and even those numbers are public: anyone can verify them live at <a href="https://prompter.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent)">prompter.goatcounter.com</a>.
+    </div>
+  </details>
   <button id="heartLink" type="button">♥ Free forever — support the builder</button>
 </div>
 
