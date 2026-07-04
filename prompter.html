@@ -89,6 +89,11 @@
   #timer.rec{display:block;color:#fff}
   #timer.rec::before{content:"●";color:var(--rec);margin-right:6px;animation:blink 1.2s infinite}
   @keyframes blink{50%{opacity:.25}}
+  #midBar{
+    position:absolute;bottom:calc(env(safe-area-inset-bottom) + 104px);left:0;right:0;
+    display:flex;justify-content:center;gap:12px;z-index:5;
+  }
+  #midBar .pill{font-size:13px;padding:10px 16px}
   #bottomBar{
     position:absolute;bottom:calc(env(safe-area-inset-bottom) + 18px);left:0;right:0;
     display:flex;justify-content:center;align-items:center;gap:26px;z-index:5;
@@ -111,7 +116,7 @@
     z-index:8;background:rgba(0,0,0,.35);
   }
   #pauseHint{
-    position:absolute;bottom:calc(env(safe-area-inset-bottom) + 108px);left:0;right:0;
+    position:absolute;bottom:calc(env(safe-area-inset-bottom) + 156px);left:0;right:0;
     text-align:center;font-size:11px;color:rgba(255,255,255,.55);z-index:4;
   }
 
@@ -126,6 +131,39 @@
   #saveBtn{background:var(--go);color:#04250f}
   #retryBtn{background:var(--panel);color:var(--text);border:1px solid var(--line)}
   #saveNote{font-size:11px;color:var(--dim);margin-top:10px;text-align:center;line-height:1.5}
+
+  /* ---------- THANKS ---------- */
+  #thanks{
+    position:fixed;inset:0;display:none;align-items:flex-end;justify-content:center;
+    background:rgba(0,0,0,.55);z-index:50;
+  }
+  #thanks.open{display:flex}
+  #thanksCard{
+    width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);
+    border-radius:22px 22px 0 0;padding:22px 20px calc(env(safe-area-inset-bottom) + 22px);
+    text-align:center;
+  }
+  #thanksCard h3{font-size:18px;font-weight:800;margin-bottom:6px}
+  #thanksCard p{font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px}
+  .tipRow{display:flex;gap:10px;margin-bottom:10px}
+  .tipBtn{
+    flex:1;padding:14px 0;border:none;border-radius:12px;background:#0070ba;
+    color:#fff;font-size:15px;font-weight:700;font-family:inherit;text-decoration:none;display:block;
+  }
+  .tipBtn.custom{background:var(--bg);border:1px solid var(--line);color:var(--text)}
+  #igBtn{
+    display:block;width:100%;padding:14px 0;border-radius:12px;margin-bottom:10px;
+    background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);
+    color:#fff;font-size:15px;font-weight:700;text-decoration:none;
+  }
+  #laterBtn{
+    background:none;border:none;color:var(--dim);font-size:13px;font-family:inherit;
+    padding:10px;text-decoration:underline;
+  }
+  #heartLink{
+    display:block;width:100%;text-align:center;margin-top:14px;background:none;border:none;
+    color:var(--dim);font-size:12px;font-family:inherit;padding:8px;
+  }
 </style>
 </head>
 <body>
@@ -161,6 +199,22 @@
   <div class="hint">
     DJI mic: plug the receiver into the USB-C port before opening the camera — iOS routes all audio through it automatically. Audio processing (noise suppression / AGC) is disabled for clean external-mic sound.
   </div>
+  <button id="heartLink" type="button">♥ Free forever — support the builder</button>
+</div>
+
+<!-- THANKS -->
+<div id="thanks">
+  <div id="thanksCard">
+    <h3>Your video is saved 🎬</h3>
+    <p>This prompter is free, no ads, no account, built by one artist.<br>If it saved you money — say thanks with any amount, or just a follow.</p>
+    <div class="tipRow">
+      <a class="tipBtn" id="tip1" target="_blank" rel="noopener">€1 ☕</a>
+      <a class="tipBtn" id="tip3" target="_blank" rel="noopener">€3 🙌</a>
+      <a class="tipBtn custom" id="tipX" target="_blank" rel="noopener">Custom</a>
+    </div>
+    <a id="igBtn" target="_blank" rel="noopener">Follow on Instagram</a>
+    <button id="laterBtn" type="button">Not now — keep recording</button>
+  </div>
 </div>
 
 <!-- RECORD -->
@@ -170,12 +224,16 @@
     <div id="promptText"></div>
     <div id="readLine"></div>
   </div>
-  <div id="topBar"><button class="pill" id="opBtn" type="button" style="font-size:12px;padding:8px 12px">Aa 90%</button><div id="timer">0:00</div></div>
+  <div id="topBar"><button class="pill" id="opBtn" type="button" style="font-size:12px;padding:8px 12px">Transparency 90%</button><div id="timer">0:00</div></div>
   <div id="pauseHint">Tap text to pause/resume scroll · drag to reposition</div>
+  <div id="midBar">
+    <button class="pill" id="restartBtn" type="button">⟲ Restart</button>
+    <button class="pill" id="testBtn" type="button">▶ Test scroll</button>
+  </div>
   <div id="bottomBar">
-    <button class="pill" id="slower">−</button>
+    <button class="pill" id="slower" type="button">Slower</button>
     <button id="recBtn"><div class="core"></div></button>
-    <button class="pill" id="faster">+</button>
+    <button class="pill" id="faster" type="button">Faster</button>
   </div>
   <button class="pill" id="backBtn" style="position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:10px;z-index:5;font-size:13px;padding:8px 14px">✕</button>
   <div id="countdown"></div>
@@ -195,6 +253,11 @@
 
 <script>
 (() => {
+  // ═══════════ YOUR LINKS — EDIT THESE TWO LINES ═══════════
+  const PAYPAL_ME = 'YOURPAYPALHANDLE';   // from paypal.me — e.g. 'LeonMueller'
+  const INSTAGRAM = 'YOURINSTAGRAM';      // your IG username without @
+  // ══════════════════════════════════════════════════════════
+
   const $ = id => document.getElementById(id);
   const screens = {setup:$('setup'), stage:$('stage'), review:$('review')};
   const show = name => { for (const k in screens) screens[k].classList.toggle('active', k===name); };
@@ -211,7 +274,7 @@
   function applyOpacity() {
     document.documentElement.style.setProperty('--textOpacity', textOpacity / 100);
     $('opVal').textContent = textOpacity + ' %';
-    $('opBtn').textContent = 'Aa ' + textOpacity + '%';
+    $('opBtn').textContent = 'Transparency ' + textOpacity + '%';
     localStorage.setItem('prompter_opacity', textOpacity);
   }
   applyOpacity();
@@ -288,6 +351,16 @@
   let scrolling = false, offset = 0, lastT = 0, rafId = null;
   const pt = $('promptText');
 
+  function setScrolling(v) {
+    scrolling = v;
+    $('testBtn').textContent = v ? '❚❚ Pause' : '▶ Test scroll';
+  }
+  function resetScroll() {
+    offset = 0; lastT = 0;
+    pt.style.transform = 'translateY(0)';
+    setScrolling(false);
+  }
+
   function scrollLoop(t) {
     if (!lastT) lastT = t;
     const dt = (t - lastT) / 1000;
@@ -313,9 +386,12 @@
     pt.style.transform = `translateY(${-offset}px)`;
   }, {passive:true});
   wrap.addEventListener('touchend', () => {
-    if (!moved) scrolling = !scrolling;
+    if (!moved) setScrolling(!scrolling);
     dragStartY = null;
   });
+
+  $('restartBtn').onclick = () => resetScroll();
+  $('testBtn').onclick = () => setScrolling(!scrolling);
 
   $('slower').onclick = () => { speed = Math.max(5, speed - 5); flashSpeed(); };
   $('faster').onclick = () => { speed = Math.min(200, speed + 5); flashSpeed(); };
@@ -335,8 +411,7 @@
 
     pt.textContent = text;
     pt.style.fontSize = fontSize + 'px';
-    offset = 0; lastT = 0; scrolling = false;
-    pt.style.transform = 'translateY(0)';
+    resetScroll();
     show('stage');
     if (rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(scrollLoop);
@@ -404,12 +479,12 @@
       const s = Math.floor((Date.now() - recStart) / 1000);
       $('timer').textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
     }, 500);
-    scrolling = true; // start scrolling with recording
+    setScrolling(true); // start scrolling with recording
   }
 
   function stopRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-    recording = false; scrolling = false;
+    recording = false; setScrolling(false);
     $('recBtn').classList.remove('recording');
     $('timer').classList.remove('rec');
     clearInterval(timerInt);
@@ -435,6 +510,21 @@
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
   }
 
+  // ---------- thanks / support ----------
+  $('tip1').href = `https://paypal.me/${PAYPAL_ME}/1EUR`;
+  $('tip3').href = `https://paypal.me/${PAYPAL_ME}/3EUR`;
+  $('tipX').href = `https://paypal.me/${PAYPAL_ME}`;
+  $('igBtn').href = `https://instagram.com/${INSTAGRAM}`;
+
+  function showThanks(force) {
+    if (!force && localStorage.getItem('prompter_thanked')) return;
+    localStorage.setItem('prompter_thanked', '1');
+    $('thanks').classList.add('open');
+  }
+  $('laterBtn').onclick = () => $('thanks').classList.remove('open');
+  $('thanks').addEventListener('click', e => { if (e.target === $('thanks')) $('thanks').classList.remove('open'); });
+  $('heartLink').onclick = () => showThanks(true);
+
   // ---------- save ----------
   $('saveBtn').onclick = async () => {
     if (!recordedBlob) return;
@@ -442,7 +532,7 @@
     const name = 'prompter-' + new Date().toISOString().replace(/[:.]/g,'-').slice(0,19) + '.' + ext;
     const file = new File([recordedBlob], name, { type: recordedBlob.type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); return; }
+      try { await navigator.share({ files: [file] }); showThanks(false); return; }
       catch (e) { if (e.name === 'AbortError') return; }
     }
     // fallback: download link
@@ -450,14 +540,14 @@
     a.href = URL.createObjectURL(recordedBlob);
     a.download = name;
     a.click();
+    showThanks(false);
   };
 
   $('retryBtn').onclick = async () => {
     recordedBlob = null;
     $('playback').src = '';
     if (!(await openCamera())) { show('setup'); return; }
-    offset = 0; lastT = 0; scrolling = false;
-    pt.style.transform = 'translateY(0)';
+    resetScroll();
     show('stage');
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
   };
