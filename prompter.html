@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Prompter">
+<meta name="theme-color" content="#0b0d10">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
 <title>Prompter</title>
 <style>
   :root{
@@ -88,6 +92,7 @@
   }
   #timer.rec{display:block;color:#fff}
   #timer.rec::before{content:"●";color:var(--rec);margin-right:6px;animation:blink 1.2s infinite}
+  #timer.rec.paused::before{content:"❚❚";color:var(--accent);animation:none}
   @keyframes blink{50%{opacity:.25}}
   #midBar{
     position:absolute;bottom:calc(env(safe-area-inset-bottom) + 104px);left:0;right:0;
@@ -156,6 +161,11 @@
     background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);
     color:#fff;font-size:15px;font-weight:700;text-decoration:none;
   }
+  #shareAppBtn{
+    display:block;width:100%;padding:14px 0;border:1px solid var(--line);border-radius:12px;
+    margin-bottom:10px;background:var(--bg);color:var(--text);
+    font-size:15px;font-weight:700;font-family:inherit;
+  }
   #laterBtn{
     background:none;border:none;color:var(--dim);font-size:13px;font-family:inherit;
     padding:10px;text-decoration:underline;
@@ -213,6 +223,7 @@
       <a class="tipBtn custom" id="tipX" target="_blank" rel="noopener">Custom</a>
     </div>
     <a id="igBtn" target="_blank" rel="noopener">Follow on Instagram</a>
+    <button id="shareAppBtn" type="button">Share this prompter with a friend</button>
     <button id="laterBtn" type="button">Not now — keep recording</button>
   </div>
 </div>
@@ -229,6 +240,7 @@
   <div id="midBar">
     <button class="pill" id="restartBtn" type="button">⟲ Restart</button>
     <button class="pill" id="testBtn" type="button">▶ Test scroll</button>
+    <button class="pill" id="pauseBtn" type="button" style="display:none;background:rgba(255,214,10,.9);color:#0b0d10;border-color:transparent">❚❚ Pause take</button>
   </div>
   <div id="bottomBar">
     <button class="pill" id="slower" type="button">Slower</button>
@@ -256,6 +268,7 @@
   // ═══════════ YOUR LINKS ═══════════
   const PAYPAL_ME = 'monoserie';    // paypal.me/monoserie
   const INSTAGRAM = 'leon.djan';    // instagram.com/leon.djan
+  const APP_URL   = 'https://systematic-artist.github.io/prompter-/prompter.html';
   // ═══════════════════════════════════
 
   const $ = id => document.getElementById(id);
@@ -434,6 +447,31 @@
   };
 
   let recording = false, counting = false, cdToken = 0, timerInt = null, recStart = 0;
+  let paused = false, pausedAt = 0, pausedTotal = 0;
+
+  function recElapsed() {
+    let t = Date.now() - recStart - pausedTotal;
+    if (paused) t -= (Date.now() - pausedAt);
+    return Math.max(0, Math.floor(t / 1000));
+  }
+
+  $('pauseBtn').onclick = () => {
+    if (!recording || !mediaRecorder) return;
+    if (!paused) {
+      try { mediaRecorder.pause(); } catch(e){ return; }
+      paused = true; pausedAt = Date.now();
+      setScrolling(false);
+      $('pauseBtn').textContent = '▶ Resume take';
+      $('timer').classList.add('paused');
+    } else {
+      try { mediaRecorder.resume(); } catch(e){ return; }
+      pausedTotal += Date.now() - pausedAt;
+      paused = false;
+      setScrolling(true);
+      $('pauseBtn').textContent = '❚❚ Pause take';
+      $('timer').classList.remove('paused');
+    }
+  };
 
   $('recBtn').onclick = async () => {
     if (recording) { stopRecording(); return; }
@@ -478,22 +516,35 @@
     mediaRecorder.start(); // single blob at stop — iOS mp4 recording is unreliable with timeslices
     recording = true;
     discardTake = false;
+    paused = false; pausedTotal = 0;
+    $('pauseBtn').style.display = '';
+    $('pauseBtn').textContent = '❚❚ Pause take';
+    $('testBtn').style.display = 'none';
+    $('restartBtn').style.display = 'none';
     $('recBtn').classList.add('recording');
     $('timer').textContent = '0:00';
     $('timer').classList.add('rec');
     recStart = Date.now();
     timerInt = setInterval(() => {
-      const s = Math.floor((Date.now() - recStart) / 1000);
+      const s = recElapsed();
       $('timer').textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
     }, 500);
     setScrolling(true); // start scrolling with recording
   }
 
   function stopRecording() {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { if (mediaRecorder.state === 'paused') mediaRecorder.resume(); } catch(e){}
+      mediaRecorder.stop();
+    }
     recording = false; setScrolling(false);
+    paused = false;
+    $('pauseBtn').style.display = 'none';
+    $('testBtn').style.display = '';
+    $('restartBtn').style.display = '';
     $('recBtn').classList.remove('recording');
     $('timer').classList.remove('rec');
+    $('timer').classList.remove('paused');
     clearInterval(timerInt);
   }
 
@@ -531,6 +582,23 @@
   $('laterBtn').onclick = () => $('thanks').classList.remove('open');
   $('thanks').addEventListener('click', e => { if (e.target === $('thanks')) $('thanks').classList.remove('open'); });
   $('heartLink').onclick = () => showThanks(true);
+
+  $('shareAppBtn').onclick = async () => {
+    const payload = {
+      title: 'Prompter',
+      text: 'Free teleprompter — script overlay on your camera, records straight to Photos. No app, no account, no subscription.',
+      url: APP_URL
+    };
+    if (navigator.share) {
+      try { await navigator.share(payload); } catch(e){}
+    } else {
+      try {
+        await navigator.clipboard.writeText(APP_URL);
+        $('shareAppBtn').textContent = 'Link copied ✓';
+        setTimeout(()=> $('shareAppBtn').textContent = 'Share this prompter with a friend', 1600);
+      } catch(e){}
+    }
+  };
 
   // ---------- save ----------
   $('saveBtn').onclick = async () => {
