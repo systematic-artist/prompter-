@@ -92,7 +92,6 @@
   }
   #timer.rec{display:block;color:#fff}
   #timer.rec::before{content:"●";color:var(--rec);margin-right:6px;animation:blink 1.2s infinite}
-  #timer.rec.paused::before{content:"❚❚";color:var(--accent);animation:none}
   @keyframes blink{50%{opacity:.25}}
   #midBar{
     position:absolute;bottom:calc(env(safe-area-inset-bottom) + 104px);left:0;right:0;
@@ -240,7 +239,6 @@
   <div id="midBar">
     <button class="pill" id="restartBtn" type="button">⟲ Restart</button>
     <button class="pill" id="testBtn" type="button">▶ Test scroll</button>
-    <button class="pill" id="pauseBtn" type="button" style="display:none;background:rgba(255,214,10,.9);color:#0b0d10;border-color:transparent">❚❚ Pause take</button>
   </div>
   <div id="bottomBar">
     <button class="pill" id="slower" type="button">Slower</button>
@@ -367,10 +365,6 @@
   function setScrolling(v) {
     scrolling = v;
     $('testBtn').textContent = v ? '❚❚ Pause' : '▶ Test scroll';
-    if (recording) {
-      $('pauseBtn').textContent = v ? '❚❚ Hold scroll' : '▶ Scroll on';
-      $('timer').classList.toggle('paused', !v);
-    }
   }
   function resetScroll() {
     offset = 0; lastT = 0;
@@ -456,15 +450,6 @@
     return Math.max(0, Math.floor((Date.now() - recStart) / 1000));
   }
 
-  // NOTE: mediaRecorder.pause()/resume() is intentionally NOT used —
-  // iOS Safari's MP4 muxer corrupts the file after repeated pause cycles
-  // (frozen video / lost audio). Recording always runs continuously;
-  // this button only holds the script scroll.
-  $('pauseBtn').onclick = () => {
-    if (!recording) return;
-    setScrolling(!scrolling);
-  };
-
   $('recBtn').onclick = async () => {
     if (recording) { stopRecording(); return; }
     if (counting) return; // ignore taps during countdown
@@ -508,8 +493,6 @@
     mediaRecorder.start(); // single blob at stop — iOS mp4 recording is unreliable with timeslices
     recording = true;
     discardTake = false;
-    $('pauseBtn').style.display = '';
-    $('pauseBtn').textContent = '❚❚ Hold scroll';
     $('testBtn').style.display = 'none';
     $('restartBtn').style.display = 'none';
     $('recBtn').classList.add('recording');
@@ -526,12 +509,10 @@
   function stopRecording() {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     recording = false; setScrolling(false);
-    $('pauseBtn').style.display = 'none';
     $('testBtn').style.display = '';
     $('restartBtn').style.display = '';
     $('recBtn').classList.remove('recording');
     $('timer').classList.remove('rec');
-    $('timer').classList.remove('paused');
     clearInterval(timerInt);
   }
 
