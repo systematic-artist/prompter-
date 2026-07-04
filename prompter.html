@@ -18,7 +18,7 @@
     --accent:#ffd60a;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;-webkit-overflow-scrolling:auto;touch-action:manipulation}
   body{
     background:var(--bg);color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"SF Pro",sans-serif;
@@ -380,11 +380,12 @@
   }, {passive:true});
   wrap.addEventListener('touchmove', e => {
     if (dragStartY === null) return;
+    e.preventDefault(); // stops Safari's pull-to-refresh hijacking the drag
     const dy = e.touches[0].clientY - dragStartY;
     if (Math.abs(dy) > 6) moved = true;
     offset = Math.max(0, dragStartOffset - dy);
     pt.style.transform = `translateY(${-offset}px)`;
-  }, {passive:true});
+  }, {passive:false});
   wrap.addEventListener('touchend', () => {
     if (!moved) setScrolling(!scrolling);
     dragStartY = null;
@@ -392,6 +393,12 @@
 
   $('restartBtn').onclick = () => resetScroll();
   $('testBtn').onclick = () => setScrolling(!scrolling);
+
+  // block pull-to-refresh on the whole recording stage (buttons still work)
+  screens.stage.addEventListener('touchmove', e => {
+    if (e.target.closest('#promptWrap')) return; // handled above
+    e.preventDefault();
+  }, {passive:false});
 
   $('slower').onclick = () => { speed = Math.max(5, speed - 5); flashSpeed(); };
   $('faster').onclick = () => { speed = Math.min(200, speed + 5); flashSpeed(); };
