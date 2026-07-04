@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Prompter</title>
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#14181d;
+    --line:#242b33;
+    --text:#e8ecef;
+    --dim:#8a949e;
+    --rec:#ff3b30;
+    --go:#30d158;
+    --accent:#ffd60a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro",sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.active{display:flex}
+
+  /* ---------- SETUP ---------- */
+  #setup{padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);overflow-y:auto}
+  #setup h1{font-size:17px;font-weight:700;letter-spacing:.3px;margin-bottom:2px}
+  #setup .sub{font-size:12px;color:var(--dim);margin-bottom:14px}
+  textarea{
+    width:100%;height:34vh;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;color:var(--text);font-size:16px;line-height:1.5;
+    padding:12px;resize:none;font-family:inherit;
+  }
+  textarea:focus{outline:none;border-color:var(--dim)}
+  .ctl{margin-top:14px}
+  .ctl label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:6px}
+  .ctl label b{color:var(--text);font-variant-numeric:tabular-nums;font-weight:600}
+  input[type=range]{width:100%;accent-color:var(--accent);height:30px}
+  .row{display:flex;gap:10px;margin-top:14px}
+  .toggle{
+    flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:11px;font-size:13px;color:var(--dim);text-align:center;font-weight:600;
+  }
+  .toggle.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+  #startBtn{
+    margin-top:18px;width:100%;padding:16px;border:none;border-radius:14px;
+    background:var(--go);color:#04250f;font-size:16px;font-weight:700;font-family:inherit;
+  }
+  #startBtn:active{opacity:.8}
+  .hint{font-size:11px;color:var(--dim);margin-top:12px;line-height:1.5}
+
+  /* ---------- RECORD ---------- */
+  #stage{background:#000}
+  #cam{
+    position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    transform:scaleX(-1); /* mirror preview like a mirror; recording is un-mirrored */
+  }
+  #promptWrap{
+    position:absolute;top:0;left:0;right:0;height:58%;
+    overflow:hidden;
+    padding-top:calc(env(safe-area-inset-top) + 8px);
+    -webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 86%,transparent 100%);
+    mask-image:linear-gradient(to bottom,transparent 0%,black 16%,black 86%,transparent 100%);
+  }
+  #promptText{
+    padding:16vh 22px 60vh;white-space:pre-wrap;font-weight:700;line-height:1.5;
+    color:#fff;
+    text-shadow:0 0 6px rgba(0,0,0,.9),0 2px 10px rgba(0,0,0,.85),0 0 2px rgba(0,0,0,1);
+    will-change:transform;
+    opacity:var(--textOpacity,.92);
+  }
+  #readLine{
+    position:absolute;left:0;right:0;top:26%;height:2px;
+    background:var(--accent);opacity:.55;pointer-events:none;
+  }
+  #topBar{
+    position:absolute;top:calc(env(safe-area-inset-top) + 8px);right:10px;
+    display:flex;gap:8px;align-items:center;z-index:5;
+  }
+  #timer{
+    font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;
+    background:rgba(0,0,0,.55);padding:6px 10px;border-radius:20px;display:none;
+  }
+  #timer.rec{display:block;color:#fff}
+  #timer.rec::before{content:"●";color:var(--rec);margin-right:6px;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.25}}
+  #bottomBar{
+    position:absolute;bottom:calc(env(safe-area-inset-bottom) + 18px);left:0;right:0;
+    display:flex;justify-content:center;align-items:center;gap:26px;z-index:5;
+  }
+  .pill{
+    background:rgba(20,24,29,.75);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:24px;
+    padding:12px 16px;font-size:14px;font-weight:700;font-family:inherit;min-width:56px;
+  }
+  #recBtn{
+    width:74px;height:74px;border-radius:50%;border:4px solid #fff;
+    background:transparent;display:flex;align-items:center;justify-content:center;
+    padding:0;
+  }
+  #recBtn .core{width:56px;height:56px;border-radius:50%;background:var(--rec);transition:all .2s}
+  #recBtn.recording .core{width:28px;height:28px;border-radius:7px}
+  #countdown{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    font-size:120px;font-weight:800;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,.7);
+    z-index:8;background:rgba(0,0,0,.35);
+  }
+  #pauseHint{
+    position:absolute;bottom:calc(env(safe-area-inset-bottom) + 108px);left:0;right:0;
+    text-align:center;font-size:11px;color:rgba(255,255,255,.55);z-index:4;
+  }
+
+  /* ---------- REVIEW ---------- */
+  #review{padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px)}
+  #review h2{font-size:16px;font-weight:700;margin-bottom:12px}
+  #playback{width:100%;flex:1;min-height:0;background:#000;border-radius:14px;object-fit:contain}
+  #review .row{margin-top:14px}
+  .big{
+    flex:1;padding:16px;border:none;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;
+  }
+  #saveBtn{background:var(--go);color:#04250f}
+  #retryBtn{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+  #saveNote{font-size:11px;color:var(--dim);margin-top:10px;text-align:center;line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="screen active" id="setup">
+  <h1>PROMPTER</h1>
+  <div class="sub">Paste script → set speed → record → save to Photos</div>
+  <div class="row" style="margin:0 0 10px">
+    <button class="toggle" id="pasteBtn" type="button">📋 Paste</button>
+    <button class="toggle" id="clearBtn" type="button">✕ Clear</button>
+  </div>
+  <textarea id="script" placeholder="Paste your script here… Line breaks and spacing are kept exactly as you write them."></textarea>
+
+  <div class="ctl">
+    <label>Text opacity <b id="opVal">90 %</b></label>
+    <input type="range" id="op" min="30" max="100" value="90">
+  </div>
+  <div class="ctl">
+    <label>Scroll speed <b id="speedVal">40 px/s</b></label>
+    <input type="range" id="speed" min="10" max="140" value="40">
+  </div>
+  <div class="ctl">
+    <label>Text size <b id="sizeVal">30 px</b></label>
+    <input type="range" id="size" min="20" max="54" value="30">
+  </div>
+  <div class="ctl">
+    <label>Countdown <b id="cdVal">3 s</b></label>
+    <input type="range" id="cd" min="0" max="10" value="3">
+  </div>
+
+  <button id="startBtn">Open camera</button>
+  <div class="hint">
+    DJI mic: plug the receiver into the USB-C port before opening the camera — iOS routes all audio through it automatically. Audio processing (noise suppression / AGC) is disabled for clean external-mic sound.
+  </div>
+</div>
+
+<!-- RECORD -->
+<div class="screen" id="stage">
+  <video id="cam" autoplay playsinline muted></video>
+  <div id="promptWrap">
+    <div id="promptText"></div>
+    <div id="readLine"></div>
+  </div>
+  <div id="topBar"><button class="pill" id="opBtn" type="button" style="font-size:12px;padding:8px 12px">Aa 90%</button><div id="timer">0:00</div></div>
+  <div id="pauseHint">Tap text to pause/resume scroll · drag to reposition</div>
+  <div id="bottomBar">
+    <button class="pill" id="slower">−</button>
+    <button id="recBtn"><div class="core"></div></button>
+    <button class="pill" id="faster">+</button>
+  </div>
+  <button class="pill" id="backBtn" style="position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:10px;z-index:5;font-size:13px;padding:8px 14px">✕</button>
+  <div id="countdown"></div>
+</div>
+
+<!-- REVIEW -->
+<div class="screen" id="review">
+  <h2>Review</h2>
+  <video id="playback" controls playsinline></video>
+  <div class="row">
+    <button class="big" id="retryBtn">Discard &amp; retake</button>
+    <button class="big" id="saveBtn">Save to Photos</button>
+  </div>
+  <div id="saveNote">Opens the share sheet → tap “Save Video”. That drops it straight into your camera roll.</div>
+  <button id="editBtn" style="margin-top:10px;background:none;border:none;color:var(--dim);font-size:13px;font-family:inherit;text-decoration:underline;padding:8px">← Back to script</button>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const screens = {setup:$('setup'), stage:$('stage'), review:$('review')};
+  const show = name => { for (const k in screens) screens[k].classList.toggle('active', k===name); };
+
+  // ---------- settings ----------
+  let speed = 40, fontSize = 30, countdownSecs = 3, textOpacity = 90;
+  const savedScript = localStorage.getItem('prompter_script');
+  if (savedScript) $('script').value = savedScript;
+  const savedSpeed = localStorage.getItem('prompter_speed');
+  if (savedSpeed) { speed = +savedSpeed; $('speed').value = speed; }
+  const savedOp = localStorage.getItem('prompter_opacity');
+  if (savedOp) { textOpacity = +savedOp; $('op').value = textOpacity; }
+
+  function applyOpacity() {
+    document.documentElement.style.setProperty('--textOpacity', textOpacity / 100);
+    $('opVal').textContent = textOpacity + ' %';
+    $('opBtn').textContent = 'Aa ' + textOpacity + '%';
+    localStorage.setItem('prompter_opacity', textOpacity);
+  }
+  applyOpacity();
+
+  $('op').oninput = e => { textOpacity = +e.target.value; applyOpacity(); };
+  $('opBtn').onclick = () => {
+    const steps = [100, 90, 75, 60, 45];
+    const i = steps.indexOf(textOpacity);
+    textOpacity = steps[(i + 1) % steps.length]; // unknown value → cycles to 100 first
+    $('op').value = textOpacity;
+    applyOpacity();
+  };
+
+  $('pasteBtn').onclick = async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t) { $('script').value = t; localStorage.setItem('prompter_script', t); }
+    } catch (e) {
+      alert('Clipboard blocked — long-press the text field and tap Paste instead.');
+    }
+  };
+  $('clearBtn').onclick = () => {
+    if ($('script').value && !confirm('Clear the script?')) return;
+    $('script').value = '';
+    localStorage.removeItem('prompter_script');
+  };
+
+  $('speed').oninput = e => { speed = +e.target.value; $('speedVal').textContent = speed + ' px/s'; };
+  $('size').oninput  = e => { fontSize = +e.target.value; $('sizeVal').textContent = fontSize + ' px'; };
+  $('cd').oninput    = e => { countdownSecs = +e.target.value; $('cdVal').textContent = countdownSecs + ' s'; };
+  $('speedVal').textContent = speed + ' px/s';
+
+  // autosave while typing — edits survive app switches
+  let saveT = null;
+  $('script').addEventListener('input', () => {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => localStorage.setItem('prompter_script', $('script').value), 400);
+  });
+
+  // ---------- camera ----------
+  let stream = null, mediaRecorder = null, chunks = [], recordedBlob = null, mimeType = '';
+  let wakeLock = null;
+
+  async function openCamera() {
+    const constraints = {
+      video: { facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30} },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (e) {
+      alert('Camera/mic access failed: ' + e.message + '\n\nMake sure you opened this page over https and allowed permissions (Settings → Safari → Camera/Microphone → Allow).');
+      return false;
+    }
+    $('cam').srcObject = stream;
+    return true;
+  }
+
+  function pickMime() {
+    const candidates = [
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=h264',
+      'video/webm'
+    ];
+    for (const c of candidates) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(c)) return c;
+    }
+    return '';
+  }
+
+  // ---------- teleprompter scroll ----------
+  let scrolling = false, offset = 0, lastT = 0, rafId = null;
+  const pt = $('promptText');
+
+  function scrollLoop(t) {
+    if (!lastT) lastT = t;
+    const dt = (t - lastT) / 1000;
+    lastT = t;
+    if (scrolling) {
+      offset += speed * dt;
+      pt.style.transform = `translateY(${-offset}px)`;
+    }
+    rafId = requestAnimationFrame(scrollLoop);
+  }
+
+  // tap = pause/resume, drag = reposition
+  let dragStartY = null, dragStartOffset = 0, moved = false;
+  const wrap = $('promptWrap');
+  wrap.addEventListener('touchstart', e => {
+    dragStartY = e.touches[0].clientY; dragStartOffset = offset; moved = false;
+  }, {passive:true});
+  wrap.addEventListener('touchmove', e => {
+    if (dragStartY === null) return;
+    const dy = e.touches[0].clientY - dragStartY;
+    if (Math.abs(dy) > 6) moved = true;
+    offset = Math.max(0, dragStartOffset - dy);
+    pt.style.transform = `translateY(${-offset}px)`;
+  }, {passive:true});
+  wrap.addEventListener('touchend', () => {
+    if (!moved) scrolling = !scrolling;
+    dragStartY = null;
+  });
+
+  $('slower').onclick = () => { speed = Math.max(5, speed - 5); flashSpeed(); };
+  $('faster').onclick = () => { speed = Math.min(200, speed + 5); flashSpeed(); };
+  function flashSpeed(){
+    localStorage.setItem('prompter_speed', speed);
+    $('pauseHint').textContent = speed + ' px/s';
+    clearTimeout(flashSpeed.t);
+    flashSpeed.t = setTimeout(()=> $('pauseHint').textContent = 'Tap text to pause/resume scroll · drag to reposition', 900);
+  }
+
+  // ---------- flow ----------
+  $('startBtn').onclick = async () => {
+    const text = $('script').value; // verbatim — line breaks & spacing preserved exactly
+    if (!text.trim()) { alert('Paste a script first.'); return; }
+    localStorage.setItem('prompter_script', text);
+    if (!(await openCamera())) return;
+
+    pt.textContent = text;
+    pt.style.fontSize = fontSize + 'px';
+    offset = 0; lastT = 0; scrolling = false;
+    pt.style.transform = 'translateY(0)';
+    show('stage');
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(scrollLoop);
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
+  };
+
+  let discardTake = false;
+  $('backBtn').onclick = () => {
+    abortCountdown();
+    if (recording) discardTake = true; // onstop will skip review
+    stopEverything();
+    show('setup');
+  };
+
+  let recording = false, counting = false, cdToken = 0, timerInt = null, recStart = 0;
+
+  $('recBtn').onclick = async () => {
+    if (recording) { stopRecording(); return; }
+    if (counting) return; // ignore taps during countdown
+    // countdown
+    if (countdownSecs > 0) {
+      counting = true;
+      const myToken = ++cdToken;
+      const cd = $('countdown');
+      cd.style.display = 'flex';
+      for (let i = countdownSecs; i > 0; i--) {
+        cd.textContent = i;
+        await new Promise(r => setTimeout(r, 1000));
+        if (myToken !== cdToken) return; // aborted by ✕
+      }
+      cd.style.display = 'none';
+      counting = false;
+    }
+    startRecording();
+  };
+
+  function abortCountdown() {
+    cdToken++;
+    counting = false;
+    $('countdown').style.display = 'none';
+  }
+
+  function startRecording() {
+    if (!stream) return;
+    chunks = [];
+    mimeType = pickMime();
+    try {
+      mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 256_000 })
+        : new MediaRecorder(stream);
+    } catch (e) {
+      alert('Recorder failed to start: ' + e.message);
+      return;
+    }
+    mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+    mediaRecorder.onstop = onRecordingStopped;
+    mediaRecorder.start(); // single blob at stop — iOS mp4 recording is unreliable with timeslices
+    recording = true;
+    discardTake = false;
+    $('recBtn').classList.add('recording');
+    $('timer').textContent = '0:00';
+    $('timer').classList.add('rec');
+    recStart = Date.now();
+    timerInt = setInterval(() => {
+      const s = Math.floor((Date.now() - recStart) / 1000);
+      $('timer').textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+    }, 500);
+    scrolling = true; // start scrolling with recording
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    recording = false; scrolling = false;
+    $('recBtn').classList.remove('recording');
+    $('timer').classList.remove('rec');
+    clearInterval(timerInt);
+  }
+
+  function onRecordingStopped() {
+    if (discardTake) { discardTake = false; chunks = []; return; }
+    const type = mimeType || 'video/mp4';
+    recordedBlob = new Blob(chunks, { type: type.split(';')[0] });
+    if ($('playback').src) URL.revokeObjectURL($('playback').src);
+    $('playback').src = URL.createObjectURL(recordedBlob);
+    stopStream();
+    show('review');
+  }
+
+  function stopStream() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; }
+  }
+  function stopEverything() {
+    if (recording) stopRecording();
+    stopStream();
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
+  // ---------- save ----------
+  $('saveBtn').onclick = async () => {
+    if (!recordedBlob) return;
+    const ext = recordedBlob.type.includes('mp4') ? 'mp4' : 'webm';
+    const name = 'prompter-' + new Date().toISOString().replace(/[:.]/g,'-').slice(0,19) + '.' + ext;
+    const file = new File([recordedBlob], name, { type: recordedBlob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    // fallback: download link
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(recordedBlob);
+    a.download = name;
+    a.click();
+  };
+
+  $('retryBtn').onclick = async () => {
+    recordedBlob = null;
+    $('playback').src = '';
+    if (!(await openCamera())) { show('setup'); return; }
+    offset = 0; lastT = 0; scrolling = false;
+    pt.style.transform = 'translateY(0)';
+    show('stage');
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
+  };
+
+  $('editBtn').onclick = () => { recordedBlob = null; show('setup'); };
+
+  // safety: stop recording when page hidden; re-grab wake lock when back
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) {
+      if (recording) stopRecording();
+      abortCountdown();
+    } else if (screens.stage.classList.contains('active') && stream) {
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
+    }
+  });
+})();
+</script>
+</body>
+</html>
