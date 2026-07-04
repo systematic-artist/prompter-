@@ -105,6 +105,14 @@
     background:rgba(0,0,0,.55);padding:6px 10px;border-radius:20px;display:none;
   }
   #timer.rec{display:block;color:#fff}
+  #micMeter{
+    width:52px;height:14px;border-radius:7px;overflow:hidden;
+    background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);
+    align-self:center;
+  }
+  #micLevel{height:100%;width:0%;background:#30d158;transition:width .06s linear}
+  #micMeter.dead{border-color:var(--rec)}
+  #micMeter.dead #micLevel{background:var(--rec);width:100% !important}
   #timer.rec::before{content:"●";color:var(--rec);margin-right:6px;animation:blink 1.2s infinite}
   @keyframes blink{50%{opacity:.25}}
   #midBar{
@@ -254,7 +262,7 @@
     <div id="promptText"></div>
     <div id="readLine"></div>
   </div>
-  <div id="topBar"><button class="pill" id="opBtn" type="button" style="font-size:12px;padding:8px 12px">Transparency 90%</button><div id="timer">0:00</div></div>
+  <div id="topBar"><div id="micMeter" title="mic level"><div id="micLevel"></div></div><button class="pill" id="opBtn" type="button" style="font-size:12px;padding:8px 12px">Transparency 90%</button><div id="timer">0:00</div></div>
   <div id="pauseHint">Tap text to pause/resume scroll · drag to reposition</div>
   <div id="midBar">
     <button class="pill" id="restartBtn" type="button">⟲ Restart</button>
@@ -397,19 +405,73 @@
   let wakeLock = null;
 
   async function openCamera() {
-    const constraints = {
-      video: { facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30} },
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-    };
-    try {
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (e) {
-      alert('Camera/mic access failed: ' + e.message + '\n\nMake sure you opened this page over https and allowed permissions (Settings → Safari → Camera/Microphone → Allow).');
+    const video = { facingMode: 'user', width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 30} };
+    // Attempt 1: clean external-mic audio (no processing). Attempt 2: default
+    // processing — some USB mics on iOS deliver a dead track with processing off.
+    const attempts = [
+      { video, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } },
+      { video, audio: true }
+    ];
+    let lastErr = null;
+    for (const constraints of attempts) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (e) { lastErr = e; continue; }
+      const at = stream.getAudioTracks();
+      if (at.length && !at[0].muted) break;      // good audio — done
+      if (constraints === attempts[attempts.length - 1]) break; // keep last try anyway
+      stream.getTracks().forEach(t => t.stop()); // dead audio — retry with defaults
+      stream = null;
+    }
+    if (!stream) {
+      alert('Camera/mic access failed: ' + (lastErr ? lastErr.message : 'unknown') + '\n\nCheck Settings → Privacy → Microphone and Camera are allowed for this app, and plug the mic in BEFORE opening the camera.');
       return false;
     }
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length) {
+      alert('⚠️ No microphone signal! The recording would be SILENT.\n\nUnplug and replug the mic, close and reopen the app, then try again.');
+    } else {
+      const t = audioTracks[0];
+      t.onmute = () => micWarn(true);
+      t.onunmute = () => micWarn(false);
+      t.onended = () => alert('⚠️ Microphone disconnected! Recordings from now on would be silent. Close the camera (✕) and reopen it.');
+    }
     $('cam').srcObject = stream;
+    setupMicMeter(stream);
     track('camera-opened');
     return true;
+  }
+
+  // live mic level meter — proof the audio path is alive before recording
+  let audioCtx = null, meterRaf = null;
+  function setupMicMeter(s) {
+    try {
+      if (!s.getAudioTracks().length) { $('micMeter').classList.add('dead'); return; }
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const src = audioCtx.createMediaStreamSource(s);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const bar = $('micLevel');
+      const loop = () => {
+        analyser.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+        bar.style.width = Math.min(100, (peak / 128) * 300) + '%';
+        meterRaf = requestAnimationFrame(loop);
+      };
+      loop();
+    } catch(e){ /* meter is best-effort */ }
+  }
+  function micWarn(on) {
+    $('micMeter').classList.toggle('dead', on);
+    if (on) $('pauseHint').textContent = '⚠️ MIC MUTED — check the receiver!';
+  }
+  function teardownMicMeter() {
+    if (meterRaf) { cancelAnimationFrame(meterRaf); meterRaf = null; }
+    if (audioCtx) { audioCtx.close().catch(()=>{}); audioCtx = null; }
   }
 
   function pickMime() {
@@ -546,6 +608,10 @@
 
   function startRecording() {
     if (!stream) return;
+    const at = stream.getAudioTracks();
+    if (!at.length || at[0].muted || at[0].readyState !== 'live') {
+      if (!confirm('⚠️ NO MIC SIGNAL — this take would be SILENT.\n\nRecord anyway?')) return;
+    }
     chunks = [];
     mimeType = pickMime();
     try {
@@ -596,6 +662,7 @@
   }
 
   function stopStream() {
+    teardownMicMeter();
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (wakeLock) { wakeLock.release().catch(()=>{}); wakeLock = null; }
   }
